@@ -23,6 +23,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"regexp"
 )
 
 var (
@@ -518,7 +519,7 @@ function: generate nginx vhost configure in yiban app engine
 @author: mos
 */
 func (container *Container) generateNginxConfig(domain string, ip string) error{
-	nginx_vhost_path := "/yby/JAVAGroup30Config/"
+	nginx_vhost_path := "/yby/JAVAGroup30Config/nginx/"
 	config_filename := nginx_vhost_path + domain + ".vhost.conf"
 	fout, err := os.Create(config_filename)
 	defer fout.Close()
@@ -772,7 +773,7 @@ func (container *Container) Start() (err error) {
 
 	// 重载 nginx
 	if g_start_container_lock {
-		nginx_cmd := exec.Command("/usr/local/sbin/nginx -s reload")
+		exec.Command("/usr/local/sbin/nginx -s reload")
 	}
 	
 	// Setup logging of stdout and stderr to disk
@@ -1087,7 +1088,7 @@ func (container *Container) buildHostnameAndHostsFiles(IP string) {
 
 	if err != nil {
 		// first create the container
-		hostsContent := []byte(`
+		hostsContent = []byte(`
 127.0.0.1	localhost
 ::1		localhost ip6-localhost ip6-loopback
 fe00::0		ip6-localnet
@@ -1095,12 +1096,11 @@ ff00::0		ip6-mcastprefix
 ff02::1		ip6-allnodes
 ff02::2		ip6-allrouters
 `)
-	}
-
-	if container.Config.Domainname != "" {
-		hostsContent = append([]byte(fmt.Sprintf("%s\t%s.%s %s\n", IP, container.Config.Hostname, container.Config.Domainname, container.Config.Hostname)), hostsContent...)
-	} else if !container.Config.NetworkDisabled {
-		hostsContent = append([]byte(fmt.Sprintf("%s\t%s\n", IP, container.Config.Hostname)), hostsContent...)
+		if container.Config.Domainname != "" {
+			hostsContent = append([]byte(fmt.Sprintf("%s\t%s.%s %s\n", IP, container.Config.Hostname, container.Config.Domainname, container.Config.Hostname)), hostsContent...)
+		} else if !container.Config.NetworkDisabled {
+			hostsContent = append([]byte(fmt.Sprintf("%s\t%s\n", IP, container.Config.Hostname)), hostsContent...)
+		}
 	}
 
 	re, _ := regexp.Compile("^.*"+cur_cache_name+"\r\n")
