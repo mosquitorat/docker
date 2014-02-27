@@ -506,6 +506,43 @@ func (container *Container) Attach(stdin io.ReadCloser, stdinCloser io.Closer, s
 	})
 }
 
+
+/**
+function: generate nginx vhost configure in yiban app engine
+          pass the request to the jetty inside the docker
+
+@param : domain string  app's unique domain
+@param : ip string      current container's ip address
+@return: true if success, false instead
+
+@author: mos
+*/
+func (container *Container) generateNginxConfig(domain string, ip string) error{
+	nginx_vhost_path := "/yby/JAVAGroup30Config/"
+	config_filename := nginx_vhost_path + domain + ".vhost.conf"
+	fout, err := os.Create(config_filename)
+	defer fout.Close()
+	if err != nil {
+		// create file error
+		return err
+	}
+
+	fout.WriteString(`server {
+        server_name `+domain+`.app.mosquitorat.cn;
+
+        location / {
+                proxy_pass http://`+ip+`:8080;
+                proxy_redirect off;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For$proxy_add_x_forwarded_for;
+                                
+        }
+	}`);
+        return nil
+}
+
+
 func (container *Container) Start() (err error) {
 	container.Lock()
 	defer container.Unlock()
@@ -528,6 +565,12 @@ func (container *Container) Start() (err error) {
 		if err := container.allocateNetwork(); err != nil {
 			return err
 		}
+		
+		// 启动容器之前获取IP后，生成nginx配置文件
+
+		// 这段代码的触发时机（Register调用后出发）：1. 启动docker后恢复上一次运行的容器 2. 命令行创建容器，某处会调用启动容器的API  3. API启动容器
+		container.generateNginxConfig(container.Name, container.NetworkSettings.IPAddress)
+
 		container.buildHostnameAndHostsFiles(container.NetworkSettings.IPAddress)
 	}
 
@@ -727,6 +770,11 @@ func (container *Container) Start() (err error) {
 
 	container.cmd = exec.Command(params[0], params[1:]...)
 
+	// 重载 nginx
+	if g_start_container_lock {
+		nginx_cmd := exec.Command("/usr/local/sbin/nginx -s reload")
+	}
+	
 	// Setup logging of stdout and stderr to disk
 	if err := container.runtime.LogToDisk(container.stdout, container.logPath("json"), "stdout"); err != nil {
 		return err

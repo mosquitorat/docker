@@ -29,6 +29,9 @@ import (
 // For more information see: http://sourceforge.net/p/aufs/aufs3-standalone/ci/aufs3.12/tree/config.mk
 const MaxImageDepth = 127
 
+
+var g_start_container_lock = false
+
 var (
 	defaultDns                = []string{"8.8.8.8", "8.8.4.4"}
 	validContainerNameChars   = `[a-zA-Z0-9_.-]`
@@ -323,7 +326,10 @@ func (runtime *Runtime) restore() error {
 		}
 		register(container)
 	}
-
+	
+	// 开锁
+	g_start_container_lock = true;
+	
 	if os.Getenv("DEBUG") == "" && os.Getenv("TEST") == "" {
 		fmt.Printf(": done.\n")
 	}
