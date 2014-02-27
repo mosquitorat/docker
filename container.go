@@ -1079,7 +1079,15 @@ func (container *Container) buildHostnameAndHostsFiles(IP string) {
 	container.HostnamePath = path.Join(container.root, "hostname")
 	ioutil.WriteFile(container.HostnamePath, []byte(container.Config.Hostname+"\n"), 0644)
 
-	hostsContent := []byte(`
+
+	cur_cache_name := "YAE_CACHE1"
+
+	container.HostsPath = path.Join(container.root, "hosts")
+	hostsContent, err := ioutil.ReadFile(container.HostsPath)
+
+	if err != nil {
+		// first create the container
+		hostsContent := []byte(`
 127.0.0.1	localhost
 ::1		localhost ip6-localhost ip6-loopback
 fe00::0		ip6-localnet
@@ -1087,14 +1095,24 @@ ff00::0		ip6-mcastprefix
 ff02::1		ip6-allnodes
 ff02::2		ip6-allrouters
 `)
-
-	container.HostsPath = path.Join(container.root, "hosts")
+	}
 
 	if container.Config.Domainname != "" {
 		hostsContent = append([]byte(fmt.Sprintf("%s\t%s.%s %s\n", IP, container.Config.Hostname, container.Config.Domainname, container.Config.Hostname)), hostsContent...)
 	} else if !container.Config.NetworkDisabled {
 		hostsContent = append([]byte(fmt.Sprintf("%s\t%s\n", IP, container.Config.Hostname)), hostsContent...)
 	}
+
+	re, _ := regexp.Compile("^.*"+cur_cache_name+"\r\n")
+	
+	if re.Match(hostsContent) {
+		// 匹配说明之前已经创建了主机，重启后IP更换
+		hostsContent = re.ReplaceAllLiteral(hostsContent, []byte(IP+"\t"+cur_cache_name+"\r\n"))	
+	} else {
+		// 不匹配说明这是一个新主机，需要添加新的缓存记录
+		hostsContent = append([]byte(fmt.Sprintf("%s\t%s\r\n", IP, cur_cache_name)), hostsContent...)
+	}
+
 
 	ioutil.WriteFile(container.HostsPath, hostsContent, 0644)
 }
