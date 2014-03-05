@@ -1790,7 +1790,8 @@ func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 			_, err := os.Stat(source)
 			if err != nil && os.IsNotExist(err) {
 				job.Errorf("Invalid bind mount '%s' : source doesn't exist", bind)
-				return engine.StatusErr
+				// uncomment for YAE, 目前只有hosts需要挂载来实现共享，此时hosts并不存在，但是在真正挂载前会生成，所以不需要检查
+				//return engine.StatusErr
 			}
 		}
 		// Register any links from the host config before starting the container

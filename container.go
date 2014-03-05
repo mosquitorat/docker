@@ -528,18 +528,26 @@ func (container *Container) generateNginxConfig(domain string, ip string) error{
 		return err
 	}
 
-	fout.WriteString(`server {
-        server_name `+domain+`.app.mosquitorat.cn;
+// TODO 部署到正服时更改域名
 
-        location / {
-                proxy_pass http://`+ip+`:8080;
-                proxy_redirect off;
-                proxy_set_header Host $host;
-                proxy_set_header X-Real-IP $remote_addr;
-                proxy_set_header X-Forwarded-For$proxy_add_x_forwarded_for;
-                                
-        }
-	}`);
+	fout.WriteString(`server {
+    server_name `+domain+`.app.mosquitorat.cn;
+    access_log /yby/log/`+domain+`/http_access.log access;
+
+    #location ~* \.(js|css|png|jpg|jpeg|gif|ico)$ {
+    #    access_log off;
+    #    expires max;
+    #}
+
+    location / {
+            proxy_pass http://`+ip+`:8080;
+            proxy_redirect off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                            
+    }
+}`);
         return nil
 }
 
@@ -570,7 +578,7 @@ func (container *Container) Start() (err error) {
 		// 启动容器之前获取IP后，生成nginx配置文件
 
 		// 这段代码的触发时机（Register调用后出发）：1. 启动docker后恢复上一次运行的容器 2. 命令行创建容器，某处会调用启动容器的API  3. API启动容器
-		container.generateNginxConfig(container.Name, container.NetworkSettings.IPAddress)
+		container.generateNginxConfig(container.Name[1:], container.NetworkSettings.IPAddress)
 
 		container.buildHostnameAndHostsFiles(container.NetworkSettings.IPAddress)
 	}
@@ -773,7 +781,13 @@ func (container *Container) Start() (err error) {
 
 	// 重载 nginx
 	if g_start_container_lock {
-		exec.Command("/usr/local/sbin/nginx -s reload")
+		nginx_cmd := exec.Command("/usr/local/nginx/sbin/nginx", "-s", "reload")
+
+		err := nginx_cmd.Run()
+		if err != nil {
+			return err
+		}
+
 	}
 	
 	// Setup logging of stdout and stderr to disk
@@ -1083,8 +1097,10 @@ func (container *Container) buildHostnameAndHostsFiles(IP string) {
 
 	cur_cache_name := "YAE_CACHE1"
 
-	container.HostsPath = path.Join(container.root, "hosts")
-	hostsContent, err := ioutil.ReadFile(container.HostsPath)
+	//container.HostsPath = path.Join(container.root, "hosts")
+
+	NfsHostsPath := "/yby/JAVAGroup30Config/hosts/"+container.Name+".hosts"
+	hostsContent, err := ioutil.ReadFile(NfsHostsPath)
 
 	if err != nil {
 		// first create the container
@@ -1095,26 +1111,33 @@ fe00::0		ip6-localnet
 ff00::0		ip6-mcastprefix
 ff02::1		ip6-allnodes
 ff02::2		ip6-allrouters
+10.21.168.141	YAE_DB1
+10.21.168.142	YAE_DB2
 `)
 		if container.Config.Domainname != "" {
-			hostsContent = append([]byte(fmt.Sprintf("%s\t%s.%s %s\n", IP, container.Config.Hostname, container.Config.Domainname, container.Config.Hostname)), hostsContent...)
+			hostsContent = append([]byte(fmt.Sprintf("%s\t%s.%s %s\r\n", IP, container.Config.Hostname, container.Config.Domainname, container.Config.Hostname)), hostsContent...)
 		} else if !container.Config.NetworkDisabled {
-			hostsContent = append([]byte(fmt.Sprintf("%s\t%s\n", IP, container.Config.Hostname)), hostsContent...)
+			hostsContent = append([]byte(fmt.Sprintf("%s\t%s\r\n", IP, container.Config.Hostname)), hostsContent...)
 		}
 	}
 
-	re, _ := regexp.Compile("^.*"+cur_cache_name+"\r\n")
+	re, _ := regexp.Compile(".*"+cur_cache_name+"\r\n")
 	
 	if re.Match(hostsContent) {
 		// 匹配说明之前已经创建了主机，重启后IP更换
 		hostsContent = re.ReplaceAllLiteral(hostsContent, []byte(IP+"\t"+cur_cache_name+"\r\n"))	
+
+		// 这里把最初生成的Hostname也替换掉
+		re, _ = regexp.Compile(".*"+container.Config.Hostname+"\r\n")
+		hostsContent = re.ReplaceAllLiteral(hostsContent, []byte(IP+"\t"+container.Config.Hostname+"\r\n"))	
+
 	} else {
 		// 不匹配说明这是一个新主机，需要添加新的缓存记录
 		hostsContent = append([]byte(fmt.Sprintf("%s\t%s\r\n", IP, cur_cache_name)), hostsContent...)
 	}
 
 
-	ioutil.WriteFile(container.HostsPath, hostsContent, 0644)
+	ioutil.WriteFile(NfsHostsPath, hostsContent, 0644)
 }
 
 func (container *Container) allocateNetwork() error {
