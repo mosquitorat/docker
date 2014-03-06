@@ -519,8 +519,7 @@ function: generate nginx vhost configure in yiban app engine
 @author: mos
 */
 func (container *Container) generateNginxConfig(domain string, ip string) error{
-	nginx_vhost_path := "/yby/JAVAGroup30Config/nginx/"
-	config_filename := nginx_vhost_path + domain + ".vhost.conf"
+	config_filename := "/yby/vhost/"+domain+".vhost.conf"
 	fout, err := os.Create(config_filename)
 	defer fout.Close()
 	if err != nil {
@@ -579,7 +578,6 @@ func (container *Container) Start() (err error) {
 
 		// 这段代码的触发时机（Register调用后出发）：1. 启动docker后恢复上一次运行的容器 2. 命令行创建容器，某处会调用启动容器的API  3. API启动容器
 		container.generateNginxConfig(container.Name[1:], container.NetworkSettings.IPAddress)
-
 		container.buildHostnameAndHostsFiles(container.NetworkSettings.IPAddress)
 	}
 
@@ -751,18 +749,35 @@ func (container *Container) Start() (err error) {
 	if err := mount.Mount(envPath, path.Join(root, "/.dockerenv"), "none", "bind,ro"); err != nil {
 		return err
 	}
+
 	if err := mount.Mount(container.ResolvConfPath, path.Join(root, "/etc/resolv.conf"), "none", "bind,ro"); err != nil {
 		return err
 	}
 
-	if container.HostnamePath != "" && container.HostsPath != "" {
+
+
+	if container.HostnamePath != "" /*&& container.HostsPath != "" */{
 		if err := mount.Mount(container.HostnamePath, path.Join(root, "/etc/hostname"), "none", "bind,ro"); err != nil {
 			return err
 		}
+		/*
 		if err := mount.Mount(container.HostsPath, path.Join(root, "/etc/hosts"), "none", "bind,ro"); err != nil {
 			return err
 		}
+		*/
 	}
+
+	host_path := path.Join(root, "/etc/hosts")
+		
+	if err:= os.Remove(host_path); err != nil {
+		if os.IsExist(err) {
+			return err;
+		}
+	}
+	if err:= os.Symlink("/yae/hosts", host_path); err != nil {
+		return err
+	}
+
 
 	// Mount user specified volumes
 
@@ -1099,7 +1114,7 @@ func (container *Container) buildHostnameAndHostsFiles(IP string) {
 
 	//container.HostsPath = path.Join(container.root, "hosts")
 
-	NfsHostsPath := "/yby/JAVAGroup30Config/hosts/"+container.Name+".hosts"
+	NfsHostsPath := "/yby/hosts"+container.Name+"/hosts"
 	hostsContent, err := ioutil.ReadFile(NfsHostsPath)
 
 	if err != nil {
@@ -1135,7 +1150,6 @@ ff02::2		ip6-allrouters
 		// 不匹配说明这是一个新主机，需要添加新的缓存记录
 		hostsContent = append([]byte(fmt.Sprintf("%s\t%s\r\n", IP, cur_cache_name)), hostsContent...)
 	}
-
 
 	ioutil.WriteFile(NfsHostsPath, hostsContent, 0644)
 }
@@ -1502,7 +1516,7 @@ func (container *Container) Unmount() error {
 	)
 
 	if container.HostnamePath != "" && container.HostsPath != "" {
-		mounts = append(mounts, path.Join(root, "/etc/hostname"), path.Join(root, "/etc/hosts"))
+		mounts = append(mounts, path.Join(root, "/etc/hostname")/*, path.Join(root, "/etc/hosts")*/)
 	}
 
 	for r := range container.Volumes {

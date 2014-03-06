@@ -249,7 +249,7 @@ func setupInitLayer(initLayer string) error {
 		"/.dockerinit":     "file",
 		"/.dockerenv":      "file",
 		"/etc/resolv.conf": "file",
-		"/etc/hosts":       "file",
+		//"/etc/hosts":       "file",
 		"/etc/hostname":    "file",
 		// "var/run": "dir",
 		// "var/lock": "dir",
