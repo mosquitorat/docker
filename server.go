@@ -1515,6 +1515,18 @@ func (srv *Server) ContainerDestroy(name string, removeVolume, removeLink bool) 
 					return err
 				}
 			}
+			// Remove nginx config
+			if err := os.Remove("/yby/vhost"+container.Name+".vhost.conf"); err != nil {
+				if os.IsExist(err) {
+					return err
+				}
+			}
+			// Reload the nginx
+			nginx_cmd := exec.Command("/usr/local/nginx/sbin/nginx", "-s", "reload")
+			err := nginx_cmd.Run()
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		return fmt.Errorf("No such container: %s", name)
